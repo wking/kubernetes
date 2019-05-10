@@ -101,30 +101,28 @@ func WaitForJobGone(c clientset.Interface, ns, jobName string, timeout time.Dura
 	})
 }
 
-// EnsureJobPodsRunning uses c to check in the Job named jobName in ns
+// EnsureAllJobPodsRunning uses c to check in the Job named jobName in ns
 // is running, returning an error if the expected parallelism is not
 // satisfied.
-func EnsureJobPodsRunning(c clientset.Interface, ns, jobName string, parallelism int32) error {
+func EnsureAllJobPodsRunning(c clientset.Interface, ns, jobName string, parallelism int32) error {
 	label := labels.SelectorFromSet(labels.Set(map[string]string{JobSelectorKey: jobName}))
 	options := metav1.ListOptions{LabelSelector: label.String()}
 	pods, err := c.CoreV1().Pods(ns).List(options)
 	if err != nil {
 		return err
 	}
-	pods := make([]string, 0, parallelism)
+	podsSummary := make([]string, 0, parallelism)
 	count := int32(0)
 	for _, p := range pods.Items {
 		if p.Status.Phase == v1.PodRunning {
 			count++
-			pods = append(pods, fmt.Sprintf("%s (%s)", p.ObjectMeta.Name, p.Status.Phase))
-		} else {
-			pods = append(pods, fmt.Sprintf("%s (%s: %s)", p.ObjectMeta.Name, p.Status.Phase, p.Status.Message))
 		}
+		podsSummary = append(podsSummary, fmt.Sprintf("%s (%s: %s)", p.ObjectMeta.Name, p.Status.Phase, p.Status.Message))
 	}
-	if count == parallelism {
-		return nil
+	if count != parallelism {
+		return fmt.Errorf("job has %d of %d expected running pods: %s", count, parallelism, strings.Join(podsSummary, ", "))
 	}
-	return fmt.Errorf("job has %d of %d expected running pods: %s", count, parallelism, strings.Join(pods, ", "))
+	return nil
 }
 
 // WaitForAllJobPodsGone waits for all pods for the Job named jobName in namespace ns
